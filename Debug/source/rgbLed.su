@@ -1,0 +1,2 @@
+rgbLed.c:13:6:init_rgb	8	static
+rgbLed.c:31:6:set_rgd	16	static

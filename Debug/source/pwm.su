@@ -1,0 +1,2 @@
+pwm.c:5:5:pwmInit	16	static
+pwm.c:33:5:pwm2Init	16	static
