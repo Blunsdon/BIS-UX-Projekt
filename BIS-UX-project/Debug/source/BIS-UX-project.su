@@ -1,0 +1,10 @@
+core_cm0plus.h:791:22:NVIC_ClearPendingIRQ	16	static
+BIS-UX-project.c:58:6:LED_handler	16	static
+BIS-UX-project.c:69:6:Sound_handler	16	static
+BIS-UX-project.c:85:6:Buzz_handler	16	static
+BIS-UX-project.c:96:6:Starting_handler	16	static
+BIS-UX-project.c:125:6:Standby_handler	16	static
+BIS-UX-project.c:135:6:state_handler	24	static
+BIS-UX-project.c:171:6:PORTD_IRQHandler	24	static
+BIS-UX-project.c:209:6:Starting_sound_handler	16	static
+BIS-UX-project.c:244:5:main	16	static

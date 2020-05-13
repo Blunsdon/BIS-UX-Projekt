@@ -1,4 +1,3 @@
-
 /**
  * @file    BIS-UX-project.c
  * @brief   Application entry point.
@@ -38,7 +37,8 @@ int i;
 typedef enum {
 	on, off
 } state_t;
-state_t State_sound = off, state_LED = off, state_starting = off, state_Buzz = off, state_standby = on;
+state_t State_sound = off, state_LED = off, state_starting = off, state_Buzz =
+		off, state_standby = on;
 
 // use for task create
 TaskHandle_t LED = NULL; // LED game
@@ -57,11 +57,10 @@ TaskHandle_t Error_sound = NULL; // 0,1 HZ
 // LED game wait 3000 ticks then turn on the BLUE LED
 void LED_handler(void *p) {
 	while (1) {
-		vTaskDelay(pdMS_TO_TICKS(3000)); //1,5 Hz
+		vTaskDelay(pdMS_TO_TICKS(3000)); //0,3 Hz
 		if (state_LED == on) {
-
+			vTaskDelay(pdMS_TO_TICKS(2000)); //0,3 Hz
 			set_rgd(BLUE);
-			//PTB->PCOR = MASK(PTB19); // Set BLUE for LED
 		}
 	}
 }
@@ -75,13 +74,12 @@ void Sound_handler(void *p) {
 			TPM0->CNT = 1;
 			TPM0->CONTROLS[2].CnV = 1000;
 			//wait a while
-			vTaskDelay(pdMS_TO_TICKS(45)); 
+			vTaskDelay(pdMS_TO_TICKS(45));
 			TPM0->CONTROLS[2].CnV = PWM_PERIOD;
 			//wait a while
 		}
 	}
 }
-
 
 // Buzz game wait 3000 ticks the vibrate
 void Buzz_handler(void *p) {
@@ -111,11 +109,17 @@ void Starting_handler(void *p) {
 			vTaskDelay(pdMS_TO_TICKS(500)); //0,3 Hz
 			set_rgd(MAGENTA); // Set Magenta
 			vTaskDelay(pdMS_TO_TICKS(500)); //0,3 Hz
+			set_rgd(BLACK);
+
+			state_starting = off;
+			vTaskSuspend(Starting_sound); // suspend sound
+			PTB->PCOR = MASK(PTB0); // Clear buzz
+			state_LED = on;
+			vTaskSuspend(NULL); // suspend until IRQ
 		}
-		//vTaskSuspend(NULL); // suspend until IRQ
+
 	}
 }
-
 
 // Standby handler runs with Green LED on infinite
 void Standby_handler(void *p) {
@@ -127,19 +131,11 @@ void Standby_handler(void *p) {
 	}
 }
 
-
-
 // state handler
 void state_handler(void *p) {
 	while (1) {
 
-		if (state_starting == on) {
-			state_starting = off;
-			vTaskSuspend( Starting_sound ); // suspend sound
-			vTaskSuspend( Starting ); // suspend starting_handler
-			PTB->PCOR = MASK(PTB0); // Clear buzz
-			state_LED = on;
-		} else if (State_sound == on) {
+		if (State_sound == on) {
 			set_rgd(BLACK);
 			State_sound = off;
 			state_Buzz = on;
@@ -153,7 +149,7 @@ void state_handler(void *p) {
 			state_LED = off;
 			set_rgd(BLACK);
 			State_sound = on;
-		} else if (state_standby == on){
+		} else if (state_standby == on) {
 			//set_rgd(BLACK);
 			state_standby = off;
 			state_starting = on;
@@ -193,25 +189,22 @@ void PORTD_IRQHandler(void) {
 	}
 }
 
-
-
-
 /*
-void Warring_sound_handler(void *p) {
-	while (1) {
-		if (State_sound == on) {
-			//TPM0->MOD = PWM_PERIOD - 1;
-			TPM0->CNT = 1;
-			TPM0->CONTROLS[2].CnV = 1000;
-			//wait a while
-			vTaskDelay(pdMS_TO_TICKS(45)); //1,5 Hz
-			TPM0->CONTROLS[2].CnV = PWM_PERIOD;
-			//wait a while
-		}
-		vTaskDelay(pdMS_TO_TICKS(1355)); //1,5 Hz
-	}
-}
-*/
+ void Warring_sound_handler(void *p) {
+ while (1) {
+ if (State_sound == on) {
+ //TPM0->MOD = PWM_PERIOD - 1;
+ TPM0->CNT = 1;
+ TPM0->CONTROLS[2].CnV = 1000;
+ //wait a while
+ vTaskDelay(pdMS_TO_TICKS(45)); //1,5 Hz
+ TPM0->CONTROLS[2].CnV = PWM_PERIOD;
+ //wait a while
+ }
+ vTaskDelay(pdMS_TO_TICKS(1355)); //1,5 Hz
+ }
+ }
+ */
 
 void Starting_sound_handler(void *p) {
 	while (1) {
@@ -232,21 +225,21 @@ void Starting_sound_handler(void *p) {
 }
 
 /*
-void Error_sound_handler(void *p) {
-	while (1) {
-		if (state_starting == on) {
-			//TPM0->MOD = PWM_PERIOD - 1;
-			TPM0->CNT = 1;
-			TPM0->CONTROLS[2].CnV = 2000;
-			//wait a while
-			//vTaskDelay(pdMS_TO_TICKS(300)); //1,5 Hz
-			TPM0->CONTROLS[2].CnV = 1000;
-			//wait a while
-		}
-		vTaskDelay(pdMS_TO_TICKS(600)); //1,5 Hz
-	}
-}
-*/
+ void Error_sound_handler(void *p) {
+ while (1) {
+ if (state_starting == on) {
+ //TPM0->MOD = PWM_PERIOD - 1;
+ TPM0->CNT = 1;
+ TPM0->CONTROLS[2].CnV = 2000;
+ //wait a while
+ //vTaskDelay(pdMS_TO_TICKS(300)); //1,5 Hz
+ TPM0->CONTROLS[2].CnV = 1000;
+ //wait a while
+ }
+ vTaskDelay(pdMS_TO_TICKS(600)); //1,5 Hz
+ }
+ }
+ */
 
 int main(void) {
 
@@ -267,7 +260,7 @@ int main(void) {
 	__enable_irq();
 
 	// Task function, name of function, stack size (90), arguments, priority (0), Which handler to use
-	xTaskCreate(LED_handler, "LED", configMINIMAL_STACK_SIZE + 90, (void*) 0,
+	xTaskCreate(LED_handler, "LED", configMINIMAL_STACK_SIZE + 120, (void*) 0,
 	configMAX_PRIORITIES - 4, &LED);
 
 	xTaskCreate(Sound_handler, "Sound", configMINIMAL_STACK_SIZE + 120,
@@ -288,19 +281,19 @@ int main(void) {
 	xTaskCreate(Standby_handler, "Standby", configMINIMAL_STACK_SIZE + 100,
 			(void*) 0,
 			configMAX_PRIORITIES - 3, &Standby);
-/*
-	xTaskCreate(Warring_sound_handler, "Warring_sound",
-	configMINIMAL_STACK_SIZE + 100, (void*) 0,
-	configMAX_PRIORITIES - 3, &Warring_sound);
-*/
+	/*
+	 xTaskCreate(Warring_sound_handler, "Warring_sound",
+	 configMINIMAL_STACK_SIZE + 100, (void*) 0,
+	 configMAX_PRIORITIES - 3, &Warring_sound);
+	 */
 	xTaskCreate(Starting_sound_handler, "Starting_sound",
 	configMINIMAL_STACK_SIZE + 100, (void*) 0,
 	configMAX_PRIORITIES - 3, &Starting_sound);
-/*
-	xTaskCreate(Error_sound_handler, "Error_sound",
-	configMINIMAL_STACK_SIZE + 100, (void*) 0,
-	configMAX_PRIORITIES - 3, &Error_sound);
-*/
+	/*
+	 xTaskCreate(Error_sound_handler, "Error_sound",
+	 configMINIMAL_STACK_SIZE + 100, (void*) 0,
+	 configMAX_PRIORITIES - 3, &Error_sound);
+	 */
 
 	// Start Scheduler
 	vTaskStartScheduler();
