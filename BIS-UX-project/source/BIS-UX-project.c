@@ -31,14 +31,19 @@
 #define PTD1 (1) // Blue
 #define PTB18 (18) // Red
 
-int i;
+//counter for game
+int buzz = 0;
+int vib = 0;
+int led = 0;
+int game_score = 0;
+
 
 // definerer 5 state tilstande
 typedef enum {
 	on, off
 } state_t;
 state_t State_sound = off, state_LED = off, state_starting = off, state_Buzz =
-		off, state_standby = on;
+		off, state_standby = on, State_result=off, game = off, end = off;
 
 // use for task create
 TaskHandle_t LED = NULL; // LED game
@@ -46,21 +51,19 @@ TaskHandle_t Sound = NULL; // Sound game
 TaskHandle_t Buzz = NULL; // Buzz game (vibrator)
 TaskHandle_t Starting = NULL; // starting up seq
 TaskHandle_t Standby = NULL; // Standby
-
+TaskHandle_t Starting_sound = NULL; // Pre-starting game
+TaskHandle_t Result_sound = NULL; // Task for result
 TaskHandle_t state = NULL; // state for games, seq and result
-
-TaskHandle_t OK_sound = NULL; // 3 Hz time counter for LED
-TaskHandle_t Warring_sound = NULL; // 1 Hz time counter for Sound
-TaskHandle_t Starting_sound = NULL; // 0,5 Hz time counter for Feel
-TaskHandle_t Error_sound = NULL; // 0,1 HZ
 
 // LED game wait 3000 ticks then turn on the BLUE LED
 void LED_handler(void *p) {
 	while (1) {
-		vTaskDelay(pdMS_TO_TICKS(3000)); //0,3 Hz
+		vTaskDelay(pdMS_TO_TICKS(1000));
 		if (state_LED == on) {
-			vTaskDelay(pdMS_TO_TICKS(2000)); //0,3 Hz
+			led++;
+			vTaskDelay(pdMS_TO_TICKS(1000));
 			set_rgd(BLUE);
+
 		}
 	}
 }
@@ -68,27 +71,29 @@ void LED_handler(void *p) {
 //Sound game wait 3000 ticks then make sound
 void Sound_handler(void *p) {
 	while (1) {
-		vTaskDelay(pdMS_TO_TICKS(3000)); //1,5 Hz
+		vTaskDelay(pdMS_TO_TICKS(1000));
 		if (State_sound == on) {
-			//TPM0->MOD = PWM_PERIOD - 1;
+			buzz++;
 			TPM0->CNT = 1;
 			TPM0->CONTROLS[2].CnV = 1000;
 			//wait a while
-			vTaskDelay(pdMS_TO_TICKS(45));
+			vTaskDelay(pdMS_TO_TICKS(1145));
 			TPM0->CONTROLS[2].CnV = PWM_PERIOD;
-			//wait a while
+			vTaskDelay(pdMS_TO_TICKS(1000));
 		}
+
 	}
 }
 
 // Buzz game wait 3000 ticks the vibrate
 void Buzz_handler(void *p) {
-	vTaskDelay(pdMS_TO_TICKS(3000)); //0,3 Hz
+	vTaskDelay(pdMS_TO_TICKS(1000));
 	while (1) {
 		if (state_Buzz == on) {
+			vib ++;
 			PTB->PSOR = MASK(PTB0); // Set buzz (vibrator)
 		}
-		vTaskDelay(pdMS_TO_TICKS(10000)); //0,3 Hz
+		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
 }
 
@@ -96,6 +101,7 @@ void Buzz_handler(void *p) {
 void Starting_handler(void *p) {
 	while (1) {
 		if (state_starting == on) {
+			game = on;
 			PTB->PTOR = MASK(PTB0); // toggle buzz
 			vTaskDelay(pdMS_TO_TICKS(500)); //0,3 Hz
 			set_rgd(RED); // set RED LED
@@ -115,6 +121,7 @@ void Starting_handler(void *p) {
 			vTaskSuspend(Starting_sound); // suspend sound
 			PTB->PCOR = MASK(PTB0); // Clear buzz
 			state_LED = on;
+
 			vTaskSuspend(NULL); // suspend until IRQ
 		}
 
@@ -131,7 +138,62 @@ void Standby_handler(void *p) {
 	}
 }
 
-// state handler
+// Sound for starting state
+void Starting_sound_handler(void *p) {
+	while (1) {
+		if (state_starting == on) {
+			//TPM0->MOD = PWM_PERIOD - 1;
+			TPM0->CNT = 1;
+			TPM0->CONTROLS[2].CnV = 1;
+			//wait a while
+			vTaskDelay(pdMS_TO_TICKS(45)); //1,5 Hz
+			TPM0->CONTROLS[2].CnV = 1000;
+			//wait a while
+			vTaskDelay(pdMS_TO_TICKS(5)); //1,5 Hz
+			TPM0->CONTROLS[2].CnV = 1;
+			//wait a while
+		}
+		vTaskDelay(pdMS_TO_TICKS(30)); //1,5 Hz
+	}
+}
+
+//
+void Result_handler(void *p) {
+	while (1) {
+		if (game ==on){
+			TPM2->CONTROLS[1].CnV = 1500; // -90 deg
+		}
+		if ((game == off) && (end == off)){
+			TPM2->CONTROLS[1].CnV = 7000; // -90 deg
+		}
+		if (State_result == on) {
+			// find en bedre måde
+			int s = game_score;
+			switch (s) {
+				case 3 :
+					TPM2->CONTROLS[1].CnV = 6000;
+					break;
+				case 4 :
+					TPM2->CONTROLS[1].CnV = 5000;
+					break;
+				case 5 :
+					TPM2->CONTROLS[1].CnV = 4000;
+					break;
+				case 6:
+				case 7 :
+					TPM2->CONTROLS[1].CnV = 3000;
+					break;
+				default :
+					TPM2->CONTROLS[1].CnV = 2200;
+					break;
+			}
+
+		}
+		vTaskDelay(pdMS_TO_TICKS(1000));
+	}
+}
+
+// Handler for all the states
 void state_handler(void *p) {
 	while (1) {
 
@@ -143,7 +205,13 @@ void state_handler(void *p) {
 			set_rgd(BLACK);
 			state_Buzz = off;
 			PTB->PCOR = MASK(PTB0); // Clear buzz
-			state_standby = on;
+			end = on;
+			State_result = on;
+			game = off;
+			game_score = vib+buzz+led;
+			vib = 0;
+			buzz = 0;
+			led = 0;
 			// start Task state_handler
 		} else if (state_LED == on) {
 			state_LED = off;
@@ -163,17 +231,24 @@ void state_handler(void *p) {
 			checkIfYieldRequired = xTaskResumeFromISR(Starting_sound);
 			portYIELD_FROM_ISR(checkIfYieldRequired);
 			//vTaskResume(Starting_handler);
+		} else if (State_result == on){
+			State_result = off;
+			game = off;
+			end = off;
+			state_standby = on;
+			game_score = 0;
 		}
 		vTaskSuspend(NULL); // suspend until IRQ
 	}
 }
 
+// IRQ handler (button interupt)
 void PORTD_IRQHandler(void) {
 	int i;
 	int z = 0;
 	if (PORTD->ISFR && MASK(PTD7)) {
 		//debounce
-		for (i = 0; i < 1480000; i++) {
+		for (i = 0; i < 3000000; i++) {
 			z++;
 		}
 		// clear pending interrupts
@@ -188,58 +263,6 @@ void PORTD_IRQHandler(void) {
 		PORTD->ISFR = 0xffffffff;
 	}
 }
-
-/*
- void Warring_sound_handler(void *p) {
- while (1) {
- if (State_sound == on) {
- //TPM0->MOD = PWM_PERIOD - 1;
- TPM0->CNT = 1;
- TPM0->CONTROLS[2].CnV = 1000;
- //wait a while
- vTaskDelay(pdMS_TO_TICKS(45)); //1,5 Hz
- TPM0->CONTROLS[2].CnV = PWM_PERIOD;
- //wait a while
- }
- vTaskDelay(pdMS_TO_TICKS(1355)); //1,5 Hz
- }
- }
- */
-
-void Starting_sound_handler(void *p) {
-	while (1) {
-		if (state_starting == on) {
-			//TPM0->MOD = PWM_PERIOD - 1;
-			TPM0->CNT = 1;
-			TPM0->CONTROLS[2].CnV = 1;
-			//wait a while
-			vTaskDelay(pdMS_TO_TICKS(45)); //1,5 Hz
-			TPM0->CONTROLS[2].CnV = 1000;
-			//wait a while
-			vTaskDelay(pdMS_TO_TICKS(5)); //1,5 Hz
-			TPM0->CONTROLS[2].CnV = 1;
-			//wait a while
-		}
-		vTaskDelay(pdMS_TO_TICKS(30)); //1,5 Hz
-	}
-}
-
-/*
- void Error_sound_handler(void *p) {
- while (1) {
- if (state_starting == on) {
- //TPM0->MOD = PWM_PERIOD - 1;
- TPM0->CNT = 1;
- TPM0->CONTROLS[2].CnV = 2000;
- //wait a while
- //vTaskDelay(pdMS_TO_TICKS(300)); //1,5 Hz
- TPM0->CONTROLS[2].CnV = 1000;
- //wait a while
- }
- vTaskDelay(pdMS_TO_TICKS(600)); //1,5 Hz
- }
- }
- */
 
 int main(void) {
 
@@ -281,19 +304,13 @@ int main(void) {
 	xTaskCreate(Standby_handler, "Standby", configMINIMAL_STACK_SIZE + 100,
 			(void*) 0,
 			configMAX_PRIORITIES - 3, &Standby);
-	/*
-	 xTaskCreate(Warring_sound_handler, "Warring_sound",
-	 configMINIMAL_STACK_SIZE + 100, (void*) 0,
-	 configMAX_PRIORITIES - 3, &Warring_sound);
-	 */
+
+	xTaskCreate(Result_handler, "Result_sound", configMINIMAL_STACK_SIZE + 100,
+			(void*) 0, configMAX_PRIORITIES - 3, &Result_sound);
+
 	xTaskCreate(Starting_sound_handler, "Starting_sound",
-	configMINIMAL_STACK_SIZE + 100, (void*) 0,
-	configMAX_PRIORITIES - 3, &Starting_sound);
-	/*
-	 xTaskCreate(Error_sound_handler, "Error_sound",
-	 configMINIMAL_STACK_SIZE + 100, (void*) 0,
-	 configMAX_PRIORITIES - 3, &Error_sound);
-	 */
+			configMINIMAL_STACK_SIZE + 100, (void*) 0, configMAX_PRIORITIES - 3,
+			&Starting_sound);
 
 	// Start Scheduler
 	vTaskStartScheduler();
